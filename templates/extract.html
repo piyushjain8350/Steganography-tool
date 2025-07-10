@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Extract Data</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .form-card {
+            background: #ffffffcc;
+            padding: 32px 32px 24px 32px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+            max-width: 450px;
+            width: 100%;
+            margin: 40px auto 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 1px solid rgba(255,255,255,0.4);
+        }
+        .form-title {
+            font-size: 1.5rem;
+            color: #2c3e50;
+            margin-bottom: 24px;
+            text-align: center;
+            font-weight: 700;
+        }
+        .form-btn {
+            background: #34495e;
+            color: #ecf0f1;
+            padding: 14px 0;
+            border: none;
+            border-radius: 8px;
+            font-size: 17px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.3s ease;
+            text-decoration: none;
+        }
+        .form-btn:hover {
+            background: #2c3e50;
+            color: #ecf0f1;
+            text-decoration: none;
+        }
+        .form-btn span {
+            margin-right: 10px;
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body class="center-content">
+    <div class="form-card">
+        <div class="form-title">🔍 Extract Hidden Data from Image</div>
+        <!-- Display flash messages -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for message in messages %}
+                        <div class="flash-message error">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        <form method="POST" enctype="multipart/form-data" onsubmit="return validateForm()" style="width:100%">
+            <label>🖼️ Upload Image:</label>
+            <input type="file" name="image" id="image" required accept="image/*">
+
+            <label>🔒 Password:</label>
+            <input type="password" name="password" id="password" required placeholder="Enter the password used to hide the data">
+
+            <button type="submit" class="form-btn"><span>🔓</span> Extract Data</button>
+        </form>
+    </div>
+    <div id="loading"><div></div></div>
+    <script>
+        function validateForm() {
+            const image = document.getElementById('image').files[0];
+            const password = document.getElementById('password').value;
+            if (!image) {
+                alert('Please select an image file.');
+                return false;
+            }
+            if (!password) {
+                alert('Please enter the password.');
+                return false;
+            }
+            // Show loading indicator
+            document.getElementById('loading').style.display = "flex";
+            return true;
+        }
+    </script>
+</body>
+</html>
