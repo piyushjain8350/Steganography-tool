@@ -4,6 +4,8 @@ from steg import encode_in_image, decode_from_image
 from werkzeug.utils import secure_filename
 from uuid import uuid4
 import time
+import logging
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'
@@ -163,6 +165,8 @@ def extract():
             )
 
         except Exception as e:
+            import traceback
+            logging.error(traceback.format_exc())
             flash(f"Failed to extract hidden data: {e}")
             return redirect(request.url)
 
