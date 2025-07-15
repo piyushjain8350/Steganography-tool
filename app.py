@@ -1,15 +1,19 @@
 import os
-from flask import Flask, render_template, request, send_file, redirect, url_for, flash
+from flask import Flask, render_template, request, send_file, redirect, url_for, flash, after_this_request
 from steg import encode_in_image, decode_from_image
 from werkzeug.utils import secure_filename
 from uuid import uuid4
 import time
 import logging
+import traceback
+from werkzeug.exceptions import RequestEntityTooLarge
+from PIL import Image
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'
-app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['UPLOAD_FOLDER'] = '/tmp'  # Use /tmp for Render
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB max upload size
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp'}
 ALLOWED_FILE_EXTENSIONS = {'txt', 'pdf', 'docx', 'png', 'jpg', 'jpeg'}
 
@@ -42,6 +46,7 @@ def hide():
         image.save(image_path)
 
         data_bytes = b''
+        hidden_path = None
         if op_type == 'text':
             text_data = request.form.get('text_data', '')
             data_bytes = text_data.encode()
@@ -64,7 +69,7 @@ def hide():
         
         # Get original filename for file extension preservation
         original_filename = None
-        if op_type == 'file' and hidden_file:
+        if op_type == 'file' and 'hidden_file' in locals():
             original_filename = hidden_file.filename
         
         try:
@@ -87,16 +92,33 @@ def hide():
             app.config.setdefault('filename_mapping', {})
             app.config['filename_mapping'][actual_internal_filename] = download_filename
             
+            # Clean up temp files
+            if os.path.exists(image_path):
+                os.remove(image_path)
+            if hidden_path and os.path.exists(hidden_path):
+                os.remove(hidden_path)
+            
             return render_template('result.html',
                 message="Data successfully hidden inside the image. Click below to download the new image.",
                 download_url=url_for('download_file', filename=actual_internal_filename),
                 elapsed_time=elapsed_time
             )
         except Exception as e:
+            logging.error(traceback.format_exc())
             flash(f"Error encoding image: {e}")
+            # Clean up temp files on error
+            if os.path.exists(image_path):
+                os.remove(image_path)
+            if hidden_path and os.path.exists(hidden_path):
+                os.remove(hidden_path)
             return redirect(request.url)
 
     return render_template('hide.html')
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_large_file(e):
+    flash("File is too large. Maximum allowed size is 10MB.")
+    return redirect(request.url)
 
 @app.route('/extract', methods=['GET', 'POST'])
 def extract():
@@ -116,6 +138,19 @@ def extract():
         image_path = os.path.join(app.config['UPLOAD_FOLDER'], image_filename)
         image.save(image_path)
 
+        # Check image dimensions to prevent memory issues
+        try:
+            with Image.open(image_path) as img_check:
+                if img_check.width > 4000 or img_check.height > 4000:
+                    os.remove(image_path)
+                    flash("Image dimensions are too large (max 4000x4000).")
+                    return redirect(request.url)
+        except Exception as e:
+            if os.path.exists(image_path):
+                os.remove(image_path)
+            flash(f"Error reading image: {e}")
+            return redirect(request.url)
+
         try:
             start_time = time.time()
             data, file_extension = decode_from_image(image_path, password)
@@ -131,6 +166,9 @@ def extract():
                 output_path = os.path.join(app.config['UPLOAD_FOLDER'], output_filename)
                 with open(output_path, 'wb') as f:
                     f.write(data)
+                # Clean up temp image file
+                if os.path.exists(image_path):
+                    os.remove(image_path)
                 return render_template('result.html',
                     message="Hidden file extracted successfully. Click below to download it.",
                     download_url=url_for('download_file', filename=output_filename),
@@ -142,6 +180,9 @@ def extract():
                 text_content = data.decode('utf-8')
                 # Additional check: if it looks like text (mostly printable characters)
                 if all(32 <= ord(char) <= 126 or char in '\n\r\t' for char in text_content[:1000]):
+                    # Clean up temp image file
+                    if os.path.exists(image_path):
+                        os.remove(image_path)
                     return render_template('text_result.html',
                         message="Hidden text extracted successfully!",
                         text_content=text_content,
@@ -158,6 +199,9 @@ def extract():
             output_path = os.path.join(app.config['UPLOAD_FOLDER'], output_filename)
             with open(output_path, 'wb') as f:
                 f.write(data)
+            # Clean up temp image file
+            if os.path.exists(image_path):
+                os.remove(image_path)
             return render_template('result.html',
                 message="Hidden file extracted successfully. Click below to download it.",
                 download_url=url_for('download_file', filename=output_filename),
@@ -165,9 +209,11 @@ def extract():
             )
 
         except Exception as e:
-            import traceback
             logging.error(traceback.format_exc())
             flash(f"Failed to extract hidden data: {e}")
+            # Clean up temp image file on error
+            if os.path.exists(image_path):
+                os.remove(image_path)
             return redirect(request.url)
 
     return render_template('extract.html')
@@ -175,7 +221,17 @@ def extract():
 @app.route('/download/<filename>')
 def download_file(filename):
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    
+
+    @after_this_request
+    def remove_file(response):
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception as e:
+            import logging
+            logging.error(f"Error deleting file {file_path}: {e}")
+        return response
+
     # Check if we have a user-friendly filename mapping
     if 'filename_mapping' in app.config and filename in app.config['filename_mapping']:
         download_filename = app.config['filename_mapping'][filename]
