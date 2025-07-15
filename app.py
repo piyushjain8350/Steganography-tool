@@ -8,12 +8,13 @@ import logging
 import traceback
 from werkzeug.exceptions import RequestEntityTooLarge
 from PIL import Image
+import gc
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'
 app.config['UPLOAD_FOLDER'] = '/tmp'  # Use /tmp for Render
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB max upload size
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max upload size
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp'}
 ALLOWED_FILE_EXTENSIONS = {'txt', 'pdf', 'docx', 'png', 'jpg', 'jpeg'}
 
@@ -97,7 +98,9 @@ def hide():
                 os.remove(image_path)
             if hidden_path and os.path.exists(hidden_path):
                 os.remove(hidden_path)
-            
+            # Explicit memory cleanup
+            del image, data_bytes, hidden_path
+            gc.collect()
             return render_template('result.html',
                 message="Data successfully hidden inside the image. Click below to download the new image.",
                 download_url=url_for('download_file', filename=actual_internal_filename),
@@ -111,6 +114,9 @@ def hide():
                 os.remove(image_path)
             if hidden_path and os.path.exists(hidden_path):
                 os.remove(hidden_path)
+            # Explicit memory cleanup
+            del image, data_bytes, hidden_path
+            gc.collect()
             return redirect(request.url)
 
     return render_template('hide.html')
@@ -141,9 +147,9 @@ def extract():
         # Check image dimensions to prevent memory issues
         try:
             with Image.open(image_path) as img_check:
-                if img_check.width > 4000 or img_check.height > 4000:
+                if img_check.width > 2000 or img_check.height > 2000:
                     os.remove(image_path)
-                    flash("Image dimensions are too large (max 4000x4000).")
+                    flash("Image dimensions are too large (max 2000x2000).")
                     return redirect(request.url)
         except Exception as e:
             if os.path.exists(image_path):
@@ -169,6 +175,9 @@ def extract():
                 # Clean up temp image file
                 if os.path.exists(image_path):
                     os.remove(image_path)
+                # Explicit memory cleanup
+                del image, data, file_extension
+                gc.collect()
                 return render_template('result.html',
                     message="Hidden file extracted successfully. Click below to download it.",
                     download_url=url_for('download_file', filename=output_filename),
@@ -183,6 +192,9 @@ def extract():
                     # Clean up temp image file
                     if os.path.exists(image_path):
                         os.remove(image_path)
+                    # Explicit memory cleanup
+                    del image, data
+                    gc.collect()
                     return render_template('text_result.html',
                         message="Hidden text extracted successfully!",
                         text_content=text_content,
@@ -202,6 +214,9 @@ def extract():
             # Clean up temp image file
             if os.path.exists(image_path):
                 os.remove(image_path)
+            # Explicit memory cleanup
+            del image
+            gc.collect()
             return render_template('result.html',
                 message="Hidden file extracted successfully. Click below to download it.",
                 download_url=url_for('download_file', filename=output_filename),
@@ -214,6 +229,9 @@ def extract():
             # Clean up temp image file on error
             if os.path.exists(image_path):
                 os.remove(image_path)
+            # Explicit memory cleanup
+            del image
+            gc.collect()
             return redirect(request.url)
 
     return render_template('extract.html')
