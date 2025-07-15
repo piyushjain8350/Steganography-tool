@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'
 app.config['UPLOAD_FOLDER'] = '/tmp'  # Use /tmp for Render
-app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max upload size
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2MB max upload size
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp'}
 ALLOWED_FILE_EXTENSIONS = {'txt', 'pdf', 'docx', 'png', 'jpg', 'jpeg'}
 
@@ -147,9 +147,9 @@ def extract():
         # Check image dimensions to prevent memory issues
         try:
             with Image.open(image_path) as img_check:
-                if img_check.width > 2000 or img_check.height > 2000:
+                if img_check.width > 1000 or img_check.height > 1000:
                     os.remove(image_path)
-                    flash("Image dimensions are too large (max 2000x2000).")
+                    flash("Image dimensions are too large (max 1000x1000).")
                     return redirect(request.url)
         except Exception as e:
             if os.path.exists(image_path):
