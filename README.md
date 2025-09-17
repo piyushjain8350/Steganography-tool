@@ -1,15 +1,15 @@
 # steganography-tool
-🔍 A simple Python Flask-based Steganography Tool for hiding and extracting secret messages inside images. Free and open source.
+🔍 A simple Python Flask-based Steganography Tool for hiding and extracting secret messages and file inside images. Free and open source.
 
 # 🖼️ Steganography Tool
 
-A lightweight **steganography web application** built with **Python Flask**, allowing you to **hide secret messages inside images and extract them**. Useful for learning and demonstrating how data can be concealed in media files.
+A lightweight **steganography web application** built with **Python Flask**, allowing you to **hide secret message and file inside images and extract them**. Useful for learning and demonstrating how data can be concealed in media files.
 
 ---
 
 ## 🚀 Features
-- 📥 **Encode**: Hide text inside image files (PNG/JPEG).
-- 🔍 **Decode**: Extract hidden messages from images.
+- 📥 **Encode**: Hide text and file inside image files (PNG/JPEG).
+- 🔍 **Decode**: Extract hidden messages and file from images.
 - 🌐 Web interface built with Flask for easy use.
 
 ---
