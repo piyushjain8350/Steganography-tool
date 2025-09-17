@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Extracted Text</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .text-container {
+            background: #ffffffcc;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+            max-width: 600px;
+            width: 100%;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.4);
+            margin-bottom: 20px;
+        }
+        
+        .text-content {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 400px;
+            overflow-y: auto;
+            line-height: 1.5;
+        }
+        
+        .success-message {
+            background: #e8f5e8;
+            color: #27ae60;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: 500;
+            border: 1px solid #c8e6c9;
+        }
+        
+        .themed-btn {
+            background: #34495e;
+            color: #ecf0f1;
+            padding: 14px 0;
+            border: none;
+            border-radius: 8px;
+            font-size: 17px;
+            cursor: pointer;
+            width: 210px;
+            margin: 0 8px 0 0;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.3s ease;
+            text-decoration: none;
+        }
+        
+        .themed-btn:last-child {
+            margin-right: 0;
+        }
+        
+        .themed-btn:hover {
+            background: #2c3e50;
+            color: #ecf0f1;
+            text-decoration: none;
+        }
+        
+        .themed-btn span {
+            margin-right: 10px;
+            font-size: 1.2em;
+        }
+        
+        .btn-row {
+            text-align: center;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body class="center-content">
+    <div class="text-container">
+        <h2>📄 Extracted Text</h2>
+        
+        <div class="success-message">
+            ✅ {{ message }}
+        </div>
+        
+        {% if elapsed_time %}
+            <div style="font-size:1.2em; margin-bottom:10px;">
+                Operation Time: {{ elapsed_time }} seconds
+            </div>
+        {% endif %}
+        
+        <label><strong>Hidden Text Content:</strong></label>
+        <div class="text-content">{{ text_content }}</div>
+        
+        <div class="btn-row">
+            <a href="{{ url_for('index') }}" class="themed-btn"><span>🏠</span> Back to Home</a>
+            <a href="{{ url_for('extract') }}" class="themed-btn"><span>🔍</span> Extract Another</a>
+        </div>
+    </div>
+</body>
+</html> 

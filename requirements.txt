@@ -1,4 +1,4 @@
-pillow
+Pillow
 opencv-python
 numpy
 flask

@@ -8,40 +8,20 @@ import logging
 import traceback
 from werkzeug.exceptions import RequestEntityTooLarge
 from PIL import Image
-import io
-import os as _os
 import gc
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'
-app.config['UPLOAD_FOLDER'] = '/tmp'  # Use /tmp for Render
+app.config['UPLOAD_FOLDER'] = 'uploads'  # Use uploads folder
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2MB max upload size
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp'}
 ALLOWED_FILE_EXTENSIONS = {'txt', 'pdf', 'docx', 'png', 'jpg', 'jpeg'}
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Allow larger images while still guarding memory. Configurable via env var.
-MAX_IMAGE_DIM = int(_os.getenv('MAX_IMAGE_DIM', '5000'))  # width/height max
-
 def allowed_file(filename, allowed_exts):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_exts
-
-def _wait_for_file_release(file_path, attempts=10, delay=0.15):
-    """On Windows, recently-saved uploads can remain locked briefly. Retry open/close."""
-    last_err = None
-    for _ in range(attempts):
-        try:
-            with open(file_path, 'rb') as f:
-                f.read(1)
-            return True
-        except Exception as e:
-            last_err = e
-            time.sleep(delay)
-    if last_err:
-        raise last_err
-    return False
 
 @app.route('/')
 def index():
@@ -65,13 +45,6 @@ def hide():
         image_filename = f"{uuid4().hex}_{secure_filename(image.filename)}"
         image_path = os.path.join(app.config['UPLOAD_FOLDER'], image_filename)
         image.save(image_path)
-        try:
-            if hasattr(image, 'close'):
-                image.close()
-            elif hasattr(image, 'stream') and hasattr(image.stream, 'close'):
-                image.stream.close()
-        except Exception:
-            pass
 
         data_bytes = b''
         hidden_path = None
@@ -87,13 +60,6 @@ def hide():
             hidden_filename = f"{uuid4().hex}_{secure_filename(hidden_file.filename)}"
             hidden_path = os.path.join(app.config['UPLOAD_FOLDER'], hidden_filename)
             hidden_file.save(hidden_path)
-            try:
-                if hasattr(hidden_file, 'close'):
-                    hidden_file.close()
-                elif hasattr(hidden_file, 'stream') and hasattr(hidden_file.stream, 'close'):
-                    hidden_file.stream.close()
-            except Exception:
-                pass
 
             with open(hidden_path, 'rb') as f:
                 data_bytes = f.read()
@@ -117,11 +83,10 @@ def hide():
             if not actual_internal_filename.endswith('.png'):
                 actual_internal_filename = os.path.splitext(actual_internal_filename)[0] + '.png'
             
-            # Create a user-friendly filename for download (same as original but with stego_ prefix)
+            # Create a user-friendly filename for download and force PNG (lossless)
+            # For correct extraction later, the stego image must remain PNG
             original_name = os.path.splitext(image.filename)[0]
-            original_ext = os.path.splitext(image.filename)[1]
-            # Keep original extension for user download, even though we save as PNG internally
-            download_filename = f"stego_{original_name}{original_ext}"
+            download_filename = f"stego_{original_name}.png"
             
             # Store the mapping for download
             app.config.setdefault('filename_mapping', {})
@@ -157,7 +122,7 @@ def hide():
 
 @app.errorhandler(RequestEntityTooLarge)
 def handle_large_file(e):
-    flash("File is too large. Maximum allowed size is 10MB.")
+    flash("File is too large. Maximum allowed size is 2MB.")
     return redirect(request.url)
 
 @app.route('/extract', methods=['GET', 'POST'])
@@ -177,34 +142,19 @@ def extract():
         image_filename = f"{uuid4().hex}_{secure_filename(image.filename)}"
         image_path = os.path.join(app.config['UPLOAD_FOLDER'], image_filename)
         image.save(image_path)
-        try:
-            if hasattr(image, 'close'):
-                image.close()
-            elif hasattr(image, 'stream') and hasattr(image.stream, 'close'):
-                image.stream.close()
-        except Exception:
-            pass
 
-        # Check image dimensions to prevent memory issues
+        # Check image dimensions (do NOT modify image; modifying breaks stego bits)
         try:
-            _wait_for_file_release(image_path)
-            # Load via bytes buffer to avoid keeping file handle locked by PIL
-            with open(image_path, 'rb') as fp:
-                img_bytes = fp.read()
-            with Image.open(io.BytesIO(img_bytes)) as img_check:
-                if img_check.width > MAX_IMAGE_DIM or img_check.height > MAX_IMAGE_DIM:
-                    os.remove(image_path)
-                    flash(f"Image dimensions are too large (max {MAX_IMAGE_DIM}x{MAX_IMAGE_DIM}).")
+            with Image.open(image_path) as img_check:
+                if img_check.width > 5000 or img_check.height > 5000:
+                    flash("Image dimensions are too large (max 5000x5000).")
                     return redirect(request.url)
         except Exception as e:
-            if os.path.exists(image_path):
-                os.remove(image_path)
             flash(f"Error reading image: {e}")
             return redirect(request.url)
 
         try:
             start_time = time.time()
-            _wait_for_file_release(image_path)
             data, file_extension = decode_from_image(image_path, password)
             end_time = time.time()
             elapsed_time = round(end_time - start_time, 2)
@@ -219,8 +169,11 @@ def extract():
                 with open(output_path, 'wb') as f:
                     f.write(data)
                 # Clean up temp image file
-                if os.path.exists(image_path):
-                    os.remove(image_path)
+                try:
+                    if os.path.exists(image_path):
+                        os.remove(image_path)
+                except Exception as cleanup_error:
+                    logging.error(f"Error cleaning up image file: {cleanup_error}")
                 # Explicit memory cleanup
                 del image, data, file_extension
                 gc.collect()
@@ -236,8 +189,11 @@ def extract():
                 # Additional check: if it looks like text (mostly printable characters)
                 if all(32 <= ord(char) <= 126 or char in '\n\r\t' for char in text_content[:1000]):
                     # Clean up temp image file
-                    if os.path.exists(image_path):
-                        os.remove(image_path)
+                    try:
+                        if os.path.exists(image_path):
+                            os.remove(image_path)
+                    except Exception as cleanup_error:
+                        logging.error(f"Error cleaning up image file: {cleanup_error}")
                     # Explicit memory cleanup
                     del image, data
                     gc.collect()
@@ -258,8 +214,11 @@ def extract():
             with open(output_path, 'wb') as f:
                 f.write(data)
             # Clean up temp image file
-            if os.path.exists(image_path):
-                os.remove(image_path)
+            try:
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+            except Exception as cleanup_error:
+                logging.error(f"Error cleaning up image file: {cleanup_error}")
             # Explicit memory cleanup
             del image
             gc.collect()
@@ -273,8 +232,11 @@ def extract():
             logging.error(traceback.format_exc())
             flash(f"Failed to extract hidden data: {e}")
             # Clean up temp image file on error
-            if os.path.exists(image_path):
-                os.remove(image_path)
+            try:
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+            except Exception as cleanup_error:
+                logging.error(f"Error cleaning up image file: {cleanup_error}")
             # Explicit memory cleanup
             del image
             gc.collect()
