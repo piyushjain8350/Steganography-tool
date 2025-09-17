@@ -1,4 +1,4 @@
-# steganography-tool
+# Steganography-tool
 🔍 A simple Python Flask-based Steganography Tool for hiding and extracting secret messages and file inside images. Free and open source.
 
 # 🖼️ Steganography Tool
@@ -18,8 +18,8 @@ A lightweight **steganography web application** built with **Python Flask**, all
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/steganography-tool.git
-cd steganography-tool
+git clone [https://github.com/piyushjain8350/Steganography-tool.git]
+cd Steganography-tool
 
 # Create virtual environment & install dependencies
 python -m venv venv
