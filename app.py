@@ -8,6 +8,8 @@ import logging
 import traceback
 from werkzeug.exceptions import RequestEntityTooLarge
 from PIL import Image
+import io
+import os as _os
 import gc
 logging.basicConfig(level=logging.INFO)
 
@@ -20,8 +22,26 @@ ALLOWED_FILE_EXTENSIONS = {'txt', 'pdf', 'docx', 'png', 'jpg', 'jpeg'}
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+# Allow larger images while still guarding memory. Configurable via env var.
+MAX_IMAGE_DIM = int(_os.getenv('MAX_IMAGE_DIM', '5000'))  # width/height max
+
 def allowed_file(filename, allowed_exts):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_exts
+
+def _wait_for_file_release(file_path, attempts=10, delay=0.15):
+    """On Windows, recently-saved uploads can remain locked briefly. Retry open/close."""
+    last_err = None
+    for _ in range(attempts):
+        try:
+            with open(file_path, 'rb') as f:
+                f.read(1)
+            return True
+        except Exception as e:
+            last_err = e
+            time.sleep(delay)
+    if last_err:
+        raise last_err
+    return False
 
 @app.route('/')
 def index():
@@ -45,6 +65,13 @@ def hide():
         image_filename = f"{uuid4().hex}_{secure_filename(image.filename)}"
         image_path = os.path.join(app.config['UPLOAD_FOLDER'], image_filename)
         image.save(image_path)
+        try:
+            if hasattr(image, 'close'):
+                image.close()
+            elif hasattr(image, 'stream') and hasattr(image.stream, 'close'):
+                image.stream.close()
+        except Exception:
+            pass
 
         data_bytes = b''
         hidden_path = None
@@ -60,6 +87,13 @@ def hide():
             hidden_filename = f"{uuid4().hex}_{secure_filename(hidden_file.filename)}"
             hidden_path = os.path.join(app.config['UPLOAD_FOLDER'], hidden_filename)
             hidden_file.save(hidden_path)
+            try:
+                if hasattr(hidden_file, 'close'):
+                    hidden_file.close()
+                elif hasattr(hidden_file, 'stream') and hasattr(hidden_file.stream, 'close'):
+                    hidden_file.stream.close()
+            except Exception:
+                pass
 
             with open(hidden_path, 'rb') as f:
                 data_bytes = f.read()
@@ -143,13 +177,24 @@ def extract():
         image_filename = f"{uuid4().hex}_{secure_filename(image.filename)}"
         image_path = os.path.join(app.config['UPLOAD_FOLDER'], image_filename)
         image.save(image_path)
+        try:
+            if hasattr(image, 'close'):
+                image.close()
+            elif hasattr(image, 'stream') and hasattr(image.stream, 'close'):
+                image.stream.close()
+        except Exception:
+            pass
 
         # Check image dimensions to prevent memory issues
         try:
-            with Image.open(image_path) as img_check:
-                if img_check.width > 1000 or img_check.height > 1000:
+            _wait_for_file_release(image_path)
+            # Load via bytes buffer to avoid keeping file handle locked by PIL
+            with open(image_path, 'rb') as fp:
+                img_bytes = fp.read()
+            with Image.open(io.BytesIO(img_bytes)) as img_check:
+                if img_check.width > MAX_IMAGE_DIM or img_check.height > MAX_IMAGE_DIM:
                     os.remove(image_path)
-                    flash("Image dimensions are too large (max 1000x1000).")
+                    flash(f"Image dimensions are too large (max {MAX_IMAGE_DIM}x{MAX_IMAGE_DIM}).")
                     return redirect(request.url)
         except Exception as e:
             if os.path.exists(image_path):
@@ -159,6 +204,7 @@ def extract():
 
         try:
             start_time = time.time()
+            _wait_for_file_release(image_path)
             data, file_extension = decode_from_image(image_path, password)
             end_time = time.time()
             elapsed_time = round(end_time - start_time, 2)

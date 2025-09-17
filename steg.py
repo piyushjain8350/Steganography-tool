@@ -13,7 +13,9 @@ def bits_to_data(bits):
 
 # Hides data in image using LSB steganography + XOR encryption
 def encode_in_image(image_path, data_bytes, password, output_path, original_filename=None):
-    img = Image.open(image_path).convert("RGBA")
+    # Open via context manager and copy to detach from file handle (prevents Windows locks)
+    with Image.open(image_path) as src_img:
+        img = src_img.convert("RGBA").copy()
     encrypted_data = xor_encrypt_decrypt(data_bytes, password)
     
     # Add file extension info and stop marker
@@ -65,7 +67,9 @@ def encode_in_image(image_path, data_bytes, password, output_path, original_file
 
 # Extracts hidden data from an image using XOR decryption
 def decode_from_image(image_path, password):
-    img = Image.open(image_path).convert("RGBA")
+    # Open via context manager and copy to detach from file handle (prevents Windows locks)
+    with Image.open(image_path) as src_img:
+        img = src_img.convert("RGBA").copy()
     
     # Convert to numpy array for faster processing
     img_array = np.array(img, dtype=np.uint8)
